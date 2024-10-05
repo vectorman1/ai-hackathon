@@ -1,19 +1,64 @@
-import { describeImage } from './imgProcessing.js';
-import { generateSpeech } from './textToSpeech.js';
+import { processImageAndQuestion } from './imgProcessing.js';
+import { generateSpeech } from './speechAssistant.js';
+import { classifyImage } from './classifier.js';
 import path from 'path';
+import fs from 'fs';
+import readline from 'readline';
 
-async function processImageAndSpeak(imagePath) {
+const OBJECT_PROMPT = fs.readFileSync(path.join(process.cwd(), 'promots/object-prompt.md'), 'utf-8');
+const SCENE_PROMPT = fs.readFileSync(path.join(process.cwd(), 'prompts/scene-prompt.md'), 'utf-8');
+
+
+async function handleConversation(imagePath) {
     try {
-        // Step 1: Describe the image
-        const imageDescription = await describeImage(imagePath);
+        // Step 1: Classify the image
+        const imageClassification = await classifyImage(imagePath);
 
-        // Step 2: Generate speech from the description
-        const speechFilePath = await generateSpeech(imageDescription);
+        // Step 2: Prepare the initial prompt based on classification
+        const initialPrompt = imageClassification === "object" ? OBJECT_PROMPT : SCENE_PROMPT;
 
-        console.log(`Image processed and speech generated. Audio file saved at: ${speechFilePath}`);
-        return speechFilePath;
+        // Step 3: Start the conversation with the initial description
+        let conversationHistory = [
+            { role: "system", content: initialPrompt },
+        ];
+
+        const { response: initialDescription, updatedHistory } = await processImageAndQuestion(
+            imagePath,
+            "Describe this image based on the given prompt.",
+            conversationHistory
+        );
+
+        conversationHistory = updatedHistory;
+
+
+        // Step 4: Handle follow-up questions
+        while (true) {
+            const followUpQuestion = await getFollowUpQuestion();
+            if (followUpQuestion.toLowerCase() === 'exit') break;
+
+            const { response, updatedHistory: newHistory } = await processImageAndQuestion(
+                imagePath,
+                followUpQuestion,
+                conversationHistory
+            );
+
+            conversationHistory = newHistory;
+
+            // Optionally, generate speech for the response
+            await generateSpeech(response);
+        }
+
     } catch (error) {
-        console.error("Error in processImageAndSpeak:", error);
+        console.error("Error in handleConversation:", error);
         throw error;
+    } finally {
     }
 }
+
+
+// Implement this function to get user input for follow-up questions
+function getFollowUpQuestion() {
+    // TODO: Get the user's follow-up question
+}
+
+
