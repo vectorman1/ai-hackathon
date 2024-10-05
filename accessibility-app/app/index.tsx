@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, Button, Image, AccessibilityInfo, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { Text, View, StyleSheet, TouchableOpacity, Button, AccessibilityInfo, ActivityIndicator, ScrollView } from 'react-native';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { CameraType } from 'expo-camera/build/legacy/Camera.types';
-import { useOpenAI } from '../hooks/useOpenAI';
+import { useRouter } from 'expo-router';
 import { useWhisper } from '../hooks/useWhisper';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function Index() {
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<CameraType>(CameraType.back);
   const [cameraPermissions, requestCameraPermissions] = useCameraPermissions();
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio, isLoading, error } = useOpenAI();
-  const [imageDescription, setImageDescription] = useState<string | null>(null);
+  const router = useRouter();
   const { 
     isInitialized, 
     isTranscribing, 
@@ -41,10 +40,6 @@ export default function Index() {
     );
   }
 
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === CameraType.back ? CameraType.front : CameraType.back));
-  };
-
   const snapPhoto = async () => {
     if (!cameraRef.current) {
       console.log('Camera ref is not ready');
@@ -53,87 +48,34 @@ export default function Index() {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        base64: true,
+        quality: 0.5, // Reduced quality
+        base64: false, // We don't need base64 here anymore
         exif: false,
       });
 
-      if (!photo || !photo.base64) {
-        console.error('Failed to take picture or base64 is missing');
-        return;
-      }
-
       console.log('Photo taken:', photo.uri);
-      setCapturedPhoto(photo.uri);
-      AccessibilityInfo.announceForAccessibility("Photo captured. Generating description...");
+      AccessibilityInfo.announceForAccessibility("Photo captured. Resizing...");
 
-      const description = await getImageDescription(photo.base64);
-      console.log('Image description:', description);
-      setImageDescription(description);
-      AccessibilityInfo.announceForAccessibility(`Description generated. Generating audio...`);
+      // Resize the image
+      const resizedPhoto = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 800 } }], // Resize to 800px width, height will adjust proportionally
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
 
-      await generateAndPlayAudio(description);
+      console.log('Photo resized:', resizedPhoto.uri);
+      AccessibilityInfo.announceForAccessibility("Photo resized. Opening photo view...");
+      
+      router.push({ pathname: '/PhotoView', params: { photoUri: resizedPhoto.uri } });
 
     } catch (error) {
-      console.error('Failed to take picture or get description:', error);
+      console.error('Failed to take or resize picture:', error);
     }
-  };
-
-  const closePhotoView = () => {
-    setCapturedPhoto(null);
-    setImageDescription(null);
-    stopAudio();
-    AccessibilityInfo.announceForAccessibility("Returned to camera view.");
   };
 
   const toggleDebug = () => {
     setShowDebug(!showDebug);
   };
-
-  if (capturedPhoto) {
-    return (
-      <View style={styles.container}>
-        <Image source={{ uri: capturedPhoto }} style={styles.capturedPhoto} accessible={true} accessibilityLabel="Captured photo" />
-        {isGeneratingText && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={styles.loadingText}>Generating description...</Text>
-          </View>
-        )}
-        {imageDescription && (
-          <View style={styles.descriptionBox}>
-            <Text style={styles.descriptionText}>{imageDescription}</Text>
-            {isGeneratingAudio && (
-              <View style={styles.audioLoadingContainer}>
-                <ActivityIndicator size="small" color="#ffffff" />
-                <Text style={styles.audioLoadingText}>Generating audio...</Text>
-              </View>
-            )}
-          </View>
-        )}
-        <View style={styles.photoViewButtonContainer}>
-          <TouchableOpacity 
-            style={styles.largeButton} 
-            onPress={closePhotoView}
-            accessible={true}
-            accessibilityLabel="Close photo view"
-            accessibilityHint="Returns to camera view"
-          >
-            <Text style={styles.largeText}>Close</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.largeButton} 
-            onPress={replayAudio}
-            accessible={true}
-            accessibilityLabel="Replay audio description"
-            accessibilityHint="Plays the audio description of the photo again"
-          >
-            <Text style={styles.largeText}>Replay Audio</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
@@ -146,15 +88,6 @@ export default function Index() {
           accessibilityHint="Captures a photo"
         >
           <Text style={styles.largeText}>Take Photo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.largeButton, isRecording ? styles.recordingButton : null]}
-          onPress={handleRecordingAndTranscription}
-          accessible={true}
-          accessibilityLabel={isRecording ? "Stop recording" : "Start recording"}
-          accessibilityHint={isRecording ? "Stops recording and starts transcription" : "Starts recording speech for transcription"}
-        >
-          <Text style={styles.largeText}>{isRecording ? 'Stop Recording' : 'Start Recording'}</Text>
         </TouchableOpacity>
       </View>
       {transcription && (
@@ -174,9 +107,9 @@ export default function Index() {
           <ActivityIndicator size="large" color="#ffffff" />
         </View>
       )}
-      {error && (
+      {whisperError && (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>{whisperError}</Text>
         </View>
       )}
       
