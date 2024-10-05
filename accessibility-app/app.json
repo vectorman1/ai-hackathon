@@ -42,7 +42,9 @@
           "recordAudioAndroid": true
         }
       ],
-      "expo-asset"
+      [
+        "expo-asset"
+      ]
     ],
     "experiments": {
       "typedRoutes": true

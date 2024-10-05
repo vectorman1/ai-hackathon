@@ -1,23 +1,49 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Image, Text, TouchableOpacity, StyleSheet, ActivityIndicator, BackHandler } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useWhisperContext } from '@/hooks/useWhisperContext';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { useOpenAI } from '../hooks/useOpenAI';
 import * as FileSystem from 'expo-file-system';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, BackHandler, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useOpenAI } from '../hooks/useOpenAI';
 
 export default function PhotoView() {
   const { photoUri } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
-  const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio } = useOpenAI();
-  const [imageDescription, setImageDescription] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    getImageDescription,
+    generateAndPlayAudio,
+    replayAudio,
+    stopAudio,
+    isLoadingText,
+    isLoadingAudio,
+    completions
+  } = useOpenAI();
+  const { transcribedTexts } = useWhisperContext()
+  const [texts, setTexts] = useState<string[]>([]);
 
   useEffect(() => {
     if (photoUri) {
       handleImageDescription();
     }
   }, [photoUri]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      stopAudio();
+    });
+
+    return unsubscribe;
+  }, [navigation, stopAudio]);
+
+  useEffect(() => {
+    // make a new list interleaving both completions and transcribed texts, starting with a completion
+    const interleaved = completions.flatMap((completion, index) => {
+      const transcription = transcribedTexts[index];
+      return transcription ? [completion, transcription] : [completion];
+    });
+    setTexts(interleaved);
+  }, [completions, transcribedTexts])
 
   useFocusEffect(
     useCallback(() => {
@@ -33,62 +59,55 @@ export default function PhotoView() {
     }, [stopAudio, router])
   );
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      stopAudio();
-    });
-
-    return unsubscribe;
-  }, [navigation, stopAudio]);
-
   const handleImageDescription = async () => {
     try {
-      setIsLoading(true);
       // Read the file and convert it to base64
       const base64 = await FileSystem.readAsStringAsync(photoUri as string, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
       const description = await getImageDescription(base64);
-      setImageDescription(description);
       await generateAndPlayAudio(description);
+
     } catch (error) {
       console.error('Failed to get description:', error);
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  const closePhotoView = () => {
-    stopAudio();
-    router.back();
   };
 
   return (
     <View style={styles.container}>
       <Image source={{ uri: photoUri as string }} style={styles.capturedPhoto} accessible={true} accessibilityLabel="Captured photo" />
-      {(isLoading || isGeneratingText) && (
+      {isLoadingText && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#ffffff" />
           <Text style={styles.loadingText}>
-            {isLoading ? "Loading image..." : "Generating description..."}
+            Generating description...
           </Text>
         </View>
       )}
-      {imageDescription && (
+      {texts.length > 0 ? (
         <View style={styles.descriptionBox}>
-          <Text style={styles.descriptionText}>{imageDescription}</Text>
-          {isGeneratingAudio && (
-            <View style={styles.audioLoadingContainer}>
-              <ActivityIndicator size="small" color="#ffffff" />
-              <Text style={styles.audioLoadingText}>Generating audio...</Text>
-            </View>
-          )}
+          {
+            texts.map((completion, idx) => (
+              <View key={idx}>
+                <Text style={styles.descriptionText}>{completion}</Text>
+                {isLoadingAudio && idx === completions.length - 1 && (
+                  <View style={styles.audioLoadingContainer}>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={styles.audioLoadingText}>Generating audio...</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          }
+
         </View>
-      )}
+      ) : null}
+
+      { }
       <View style={styles.photoViewButtonContainer}>
-        <TouchableOpacity 
-          style={styles.largeButton} 
+        <TouchableOpacity
+          style={styles.largeButton}
           onPress={replayAudio}
           accessible={true}
           accessibilityLabel="Replay audio description"
@@ -129,7 +148,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 100,
     textAlignVertical: 'top',
-    
+
   },
   loadingContainer: {
     flexDirection: 'row',
