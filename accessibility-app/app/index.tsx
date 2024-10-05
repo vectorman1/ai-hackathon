@@ -1,42 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, Button, GestureResponderEvent, Image, AccessibilityInfo, ActivityIndicator } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, Button, Image, AccessibilityInfo, ActivityIndicator, ScrollView } from 'react-native';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { CameraType } from 'expo-camera/build/legacy/Camera.types';
-import { PermissionStatus } from 'expo-modules-core';
-import { Audio } from 'expo-av';
 import { useOpenAI } from '../hooks/useOpenAI';
+import { useWhisper } from '../hooks/useWhisper';
 
 export default function Index() {
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<CameraType>(CameraType.back);
-  const [recording, setRecording] = useState<Audio.Recording>();
   const [cameraPermissions, requestCameraPermissions] = useCameraPermissions();
-  const [audioPermissions, requestAudioPermissions] = Audio.usePermissions();
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const [lastRecordingUri, setLastRecordingUri] = useState<string | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio, isLoading, error } = useOpenAI();
   const [imageDescription, setImageDescription] = useState<string | null>(null);
+  const { 
+    isInitialized, 
+    isTranscribing, 
+    isRecording,
+    transcription, 
+    error: whisperError, 
+    handleRecordingAndTranscription,
+    downloadProgress, 
+    debugInfo,
+  } = useWhisper();
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
-    // Announce when the screen is focused
     AccessibilityInfo.announceForAccessibility("Camera screen is ready. Tap the bottom of the screen for controls.");
-    
-    return sound
-      ? () => {
-          console.log('Unloading Sound');
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  }, []);
 
   if (!cameraPermissions) {
-    // Camera permissions are still loading.
     return <View />;
   }
 
   if (!cameraPermissions.granted) {
-    // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
         <Text style={styles.message}>We need your permission to show the camera</Text>
@@ -45,9 +41,9 @@ export default function Index() {
     );
   }
 
-  function toggleCameraFacing() {
+  const toggleCameraFacing = () => {
     setFacing(current => (current === CameraType.back ? CameraType.front : CameraType.back));
-  }
+  };
 
   const snapPhoto = async () => {
     if (!cameraRef.current) {
@@ -71,107 +67,28 @@ export default function Index() {
       setCapturedPhoto(photo.uri);
       AccessibilityInfo.announceForAccessibility("Photo captured. Generating description...");
 
-      // Get description from OpenAI using the base64 property
       const description = await getImageDescription(photo.base64);
       console.log('Image description:', description);
       setImageDescription(description);
       AccessibilityInfo.announceForAccessibility(`Description generated. Generating audio...`);
 
-      // Generate and play audio description
       await generateAndPlayAudio(description);
 
     } catch (error) {
       console.error('Failed to take picture or get description:', error);
     }
-  }
+  };
 
   const closePhotoView = () => {
     setCapturedPhoto(null);
-    setLastRecordingUri(null);
     setImageDescription(null);
-    stopAudio(); // Stop the audio when closing the photo view
+    stopAudio();
     AccessibilityInfo.announceForAccessibility("Returned to camera view.");
-  }
+  };
 
-  const pttOnPointerDown = async (e: GestureResponderEvent) => {
-    try {
-      if (!audioPermissions) {
-        console.log('Audio permissions are not ready');
-        return;
-      }
-
-      if (audioPermissions.status !== 'granted') {
-        console.log('Requesting permission..');
-        await requestAudioPermissions();
-      }
-
-      if (recording) {
-        console.log('Recording is already in progress');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(newRecording);
-      console.log('Recording started');
-      if (newRecording) {
-        AccessibilityInfo.announceForAccessibility("Recording started. Speak now.");
-      }
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-    }
-  }
-
-  const pttOnPointerUp = async (e: GestureResponderEvent) => {
-    console.log('Stopping recording..');
-    if (recording) {
-      try {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-        console.log('Recording stopped and stored at', uri);
-        setLastRecordingUri(uri);
-        if (uri) {
-          AccessibilityInfo.announceForAccessibility("Recording stopped and saved. You can now play it back.");
-        }
-      } catch (error) {
-        console.error('Failed to stop recording:', error);
-      }
-      setRecording(undefined);
-    } else {
-      console.log('No active recording to stop');
-    }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-    });
-  }
-
-  const playRecording = async () => {
-    if (lastRecordingUri) {
-      try {
-        const { sound: newSound } = await Audio.Sound.createAsync({ uri: lastRecordingUri });
-        setSound(newSound);
-        await newSound.playAsync();
-        newSound.setOnPlaybackStatusUpdate(async (status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            await newSound.unloadAsync();
-            setSound(null);
-          }
-        });
-        if (newSound) {
-          AccessibilityInfo.announceForAccessibility("Playing recorded description.");
-        }
-      } catch (error) {
-        console.error('Failed to play recording:', error);
-      }
-    }
-  }
-
-
+  const toggleDebug = () => {
+    setShowDebug(!showDebug);
+  };
 
   if (capturedPhoto) {
     return (
@@ -213,27 +130,6 @@ export default function Index() {
           >
             <Text style={styles.largeText}>Replay Audio</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.largeButton, recording ? styles.recordingButton : null]} 
-            onPressIn={pttOnPointerDown} 
-            onPressOut={pttOnPointerUp}
-            accessible={true}
-            accessibilityLabel={recording ? "Recording in progress" : "Record description"}
-            accessibilityHint="Press and hold to record a description of the photo"
-          >
-            <Text style={styles.largeText}>{recording ? 'Recording...' : 'Record Description'}</Text>
-          </TouchableOpacity>
-          {lastRecordingUri && (
-            <TouchableOpacity 
-              style={styles.largeButton} 
-              onPress={playRecording}
-              accessible={true}
-              accessibilityLabel="Play recorded description"
-              accessibilityHint="Plays back the recorded description of the photo"
-            >
-              <Text style={styles.largeText}>Play Recording</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     );
@@ -241,27 +137,65 @@ export default function Index() {
 
   return (
     <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
-        <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.largeButton} 
-              onPress={toggleCameraFacing}
-              accessible={true}
-              accessibilityLabel="Flip Camera"
-              accessibilityHint="Switches between front and back camera"
-            >
-              <Text style={styles.largeText}>Flip Camera</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.largeButton} 
-              onPress={snapPhoto}
-              accessible={true}
-              accessibilityLabel="Take Photo"
-              accessibilityHint="Captures a photo"
-            >
-              <Text style={styles.largeText}>Take Photo</Text>
-            </TouchableOpacity>
-          </View>
-      </CameraView>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity 
+          style={styles.largeButton} 
+          onPress={snapPhoto}
+          accessible={true}
+          accessibilityLabel="Take Photo"
+          accessibilityHint="Captures a photo"
+        >
+          <Text style={styles.largeText}>Take Photo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.largeButton, isRecording ? styles.recordingButton : null]}
+          onPress={handleRecordingAndTranscription}
+          accessible={true}
+          accessibilityLabel={isRecording ? "Stop recording" : "Start recording"}
+          accessibilityHint={isRecording ? "Stops recording and starts transcription" : "Starts recording speech for transcription"}
+        >
+          <Text style={styles.largeText}>{isRecording ? 'Stop Recording' : 'Start Recording'}</Text>
+        </TouchableOpacity>
+      </View>
+      {transcription && (
+        <View style={styles.transcriptionBox}>
+          <Text style={styles.transcriptionText}>{transcription}</Text>
+        </View>
+      )}
+      {isTranscribing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#ffffff" />
+          <Text style={styles.loadingText}>Transcribing...</Text>
+        </View>
+      )}
+      {!isInitialized && downloadProgress < 1 && (
+        <View style={styles.downloadProgressContainer}>
+          <Text style={styles.downloadProgressText}>Downloading Whisper model: {Math.round(downloadProgress * 100)}%</Text>
+          <ActivityIndicator size="large" color="#ffffff" />
+        </View>
+      )}
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+      
+      <TouchableOpacity 
+        style={styles.debugToggleButton}
+        onPress={toggleDebug}
+        accessible={true}
+        accessibilityLabel={showDebug ? "Hide debug info" : "Show debug info"}
+        accessibilityHint="Toggles the visibility of debug information"
+      >
+        <Text style={styles.debugToggleText}>{showDebug ? 'Hide Debug' : 'Show Debug'}</Text>
+      </TouchableOpacity>
+
+      {showDebug && (
+        <ScrollView style={styles.debugBox}>
+          <Text style={styles.debugText}>{debugInfo}</Text>
+        </ScrollView>
+      )}
+    </CameraView>
   );
 }
 
@@ -340,6 +274,15 @@ const styles = StyleSheet.create({
     minWidth: 150,
     alignItems: 'center',
   },
+
+  largeButton1: {
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 15,
+    margin: 50,
+    minWidth: 150,
+    alignItems: 'center',
+  },
   largeText: {
     fontSize: 24,
     color: 'white',
@@ -385,5 +328,73 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     marginLeft: 10,
+  },
+  transcriptionBox: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  transcriptionText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  downloadProgressContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  downloadProgressText: {
+    color: 'white',
+    fontSize: 18,
+    marginBottom: 20,
+  },
+  debugToggleButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 10,
+    borderRadius: 5,
+    zIndex: 1, // Ensure the button is above other elements
+  },
+  debugToggleText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  debugBox: {
+    position: 'absolute',
+    top: 90, // Increased from 80 to 90 to move it below the button
+    left: 20,
+    right: 20,
+    bottom: 20, // Added to give some space at the bottom
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  debugText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  errorBox: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(255, 0, 0, 0.7)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  errorText: {
+    color: 'white',
+    fontSize: 14,
   },
 });
