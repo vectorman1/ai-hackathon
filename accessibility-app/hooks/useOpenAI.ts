@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 import OpenAI from 'openai-react-native';
+import { handleConversation } from '../ai/processAndSpeak';
 
 const API_KEY = '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'; // Replace with your actual API key
 const SYSTEM_PROMPT = "Here's a direct and concise system prompt for a visually impaired person helper LLM: \n" +
@@ -63,30 +64,31 @@ export const useOpenAI = () => {
     setError(null);
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: SYSTEM_PROMPT },
-              {
-                type: "image_url",
-                image_url: {
-                  "url": `data:image/jpeg;base64,${imageB64}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 300
-      });
-
-      if (response.choices && response.choices.length > 0 && response.choices[0].message) {
-        return response.choices[0].message.content || 'No description available';
-      } else {
-        throw new Error('Unexpected response structure from OpenAI API');
-      }
+      // const response = await openai.chat.completions.create({
+      //   model: "gpt-4o-mini",
+      //   messages: [
+      //     {
+      //       role: "user",
+      //       content: [
+      //         { type: "text", text: SYSTEM_PROMPT },
+      //         {
+      //           type: "image_url",
+      //           image_url: {
+      //             "url": `data:image/jpeg;base64,${imageB64}`,
+      //           },
+      //         },
+      //       ],
+      //     },
+      //   ],
+      //   max_tokens: 300
+      // });
+      //
+      // if (response.choices && response.choices.length > 0 && response.choices[0].message) {
+      //   return response.choices[0].message.content || 'No description available';
+      // } else {
+      //   throw new Error('Unexpected response structure from OpenAI API');
+      // }
+      return await handleConversation(imageB64)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       setError(errorMessage);

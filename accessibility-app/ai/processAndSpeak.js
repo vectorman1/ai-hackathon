@@ -9,7 +9,7 @@ const OBJECT_PROMPT = fs.readFileSync(path.join(process.cwd(), 'promots/object-p
 const SCENE_PROMPT = fs.readFileSync(path.join(process.cwd(), 'prompts/scene-prompt.md'), 'utf-8');
 
 
-async function handleConversation(imagePath) {
+export async function handleConversation(imagePath) {
     try {
         // Step 1: Classify the image
         const imageClassification = await classifyImage(imagePath);
@@ -30,23 +30,23 @@ async function handleConversation(imagePath) {
 
         conversationHistory = updatedHistory;
 
+        return initialDescription
+        // // Step 4: Handle follow-up questions
+        // while (true) {
+        //     const followUpQuestion = await getFollowUpQuestion();
+        //     if (followUpQuestion.toLowerCase() === 'exit') break;
 
-        // Step 4: Handle follow-up questions
-        while (true) {
-            const followUpQuestion = await getFollowUpQuestion();
-            if (followUpQuestion.toLowerCase() === 'exit') break;
+        //     const { response, updatedHistory: newHistory } = await processImageAndQuestion(
+        //         imagePath,
+        //         followUpQuestion,
+        //         conversationHistory
+        //     );
 
-            const { response, updatedHistory: newHistory } = await processImageAndQuestion(
-                imagePath,
-                followUpQuestion,
-                conversationHistory
-            );
+        //     conversationHistory = newHistory;
 
-            conversationHistory = newHistory;
-
-            // Optionally, generate speech for the response
-            await generateSpeech(response);
-        }
+        //     // Optionally, generate speech for the response
+        //     await generateSpeech(response);
+        // }
 
     } catch (error) {
         console.error("Error in handleConversation:", error);

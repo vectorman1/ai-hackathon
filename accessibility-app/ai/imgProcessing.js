@@ -9,11 +9,8 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function processImageAndQuestion(imagePath, question, conversationHistory = []) {
+export async function processImageAndQuestion(base64Image, question, conversationHistory = []) {
     try {
-        const imageBuffer = fs.readFileSync(imagePath);
-        const base64Image = imageBuffer.toString('base64');
-
         const messages = [
             ...conversationHistory,
             {
