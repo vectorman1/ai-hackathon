@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Text, View, StyleSheet, TouchableOpacity, Button } from 'react-native';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { CameraType } from 'expo-camera/build/legacy/Camera.types';
@@ -7,6 +7,7 @@ import { PermissionStatus } from 'expo-modules-core';
 export default function Index() {
   const [facing, setFacing] = useState<CameraType>(CameraType.back);
   const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
 
   if (!permission) {
     // Camera permissions are still loading.
@@ -27,16 +28,37 @@ export default function Index() {
     setFacing(current => (current === CameraType.back ? CameraType.front : CameraType.back));
   }
 
+  const snapPhoto = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync();
+        if (!photo) {
+          console.error('Failed to take picture');
+          return;
+        }
+
+        console.log('Photo taken:', photo.uri);
+        // Here you can add logic to handle the captured photo
+        // For example, you could set it to state, display it, or send it to a server
+      } catch (error) {
+        console.error('Failed to take picture:', error);
+      }
+    } else {
+      console.log('Camera ref is not ready');
+    }
+  }
+
   return (
-    <View style={styles.container}>
-      <CameraView style={styles.camera} facing={facing}>
+    <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
-            <Text style={styles.text}>Flip Camera</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
+              <Text style={styles.text}>Flip Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cameraButton} onPress={requestPermission}>
+              <Text style={styles.text}>Snap photo</Text>
+            </TouchableOpacity>
+          </View>
       </CameraView>
-    </View>
   );
 }
 
@@ -49,17 +71,27 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flex: 1,
-    backgroundColor: 'transparent',
     flexDirection: 'row',
-    margin: 20,
+    justifyContent: 'center', 
+    alignItems: 'flex-end',
+    paddingBottom: 20,
+    gap: 20,
   },
-  button: {
-    flex: 0.1,
-    alignSelf: 'flex-end',
-    alignItems: 'center',
+  cameraButton: {
+    padding: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 50,
+  },
+  flipButton: {
+    padding: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 50,
   },
   text: {
     fontSize: 18,
     color: 'white',
   },
+  message: {
+    fontSize: 18,
+  }
 });
