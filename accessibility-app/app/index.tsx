@@ -4,7 +4,7 @@ import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { CameraType } from 'expo-camera/build/legacy/Camera.types';
 import { PermissionStatus } from 'expo-modules-core';
 import { Audio } from 'expo-av';
-import { useOpenAIRealtime } from '../hooks/useOpenAI';
+import { useOpenAI } from '../hooks/useOpenAI';
 
 export default function Index() {
   const cameraRef = useRef<CameraView>(null);
@@ -15,7 +15,7 @@ export default function Index() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [lastRecordingUri, setLastRecordingUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio, isLoading, error } = useOpenAIRealtime();
+  const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio, isLoading, error } = useOpenAI();
   const [imageDescription, setImageDescription] = useState<string | null>(null);
 
   useEffect(() => {

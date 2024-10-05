@@ -28,7 +28,7 @@ const SYSTEM_PROMPT = "Here's a direct and concise system prompt for a visually 
 
 const openai = new OpenAI({ apiKey: API_KEY, baseURL: 'https://api.openai.com/v1' }); 
 
-export const useOpenAIRealtime = () => {
+export const useOpenAI = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingText, setIsGeneratingText] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
