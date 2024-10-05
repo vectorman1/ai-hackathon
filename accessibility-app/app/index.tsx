@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, Button, GestureResponderEvent, Image, AccessibilityInfo } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, Button, GestureResponderEvent, Image, AccessibilityInfo, ActivityIndicator } from 'react-native';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import { CameraType } from 'expo-camera/build/legacy/Camera.types';
 import { PermissionStatus } from 'expo-modules-core';
 import { Audio } from 'expo-av';
+import { useOpenAIRealtime } from '../hooks/useOpenAI';
 
 export default function Index() {
   const cameraRef = useRef<CameraView>(null);
@@ -14,6 +15,8 @@ export default function Index() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [lastRecordingUri, setLastRecordingUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const { getImageDescription, generateAndPlayAudio, replayAudio, stopAudio, isGeneratingText, isGeneratingAudio, isLoading, error } = useOpenAIRealtime();
+  const [imageDescription, setImageDescription] = useState<string | null>(null);
 
   useEffect(() => {
     // Announce when the screen is focused
@@ -59,22 +62,34 @@ export default function Index() {
         exif: false,
       });
 
-      if (!photo) {
-        console.error('Failed to take picture');
+      if (!photo || !photo.base64) {
+        console.error('Failed to take picture or base64 is missing');
         return;
       }
 
       console.log('Photo taken:', photo.uri);
       setCapturedPhoto(photo.uri);
-      AccessibilityInfo.announceForAccessibility("Photo captured. You can now record a description.");
+      AccessibilityInfo.announceForAccessibility("Photo captured. Generating description...");
+
+      // Get description from OpenAI using the base64 property
+      const description = await getImageDescription(photo.base64);
+      console.log('Image description:', description);
+      setImageDescription(description);
+      AccessibilityInfo.announceForAccessibility(`Description generated. Generating audio...`);
+
+      // Generate and play audio description
+      await generateAndPlayAudio(description);
+
     } catch (error) {
-      console.error('Failed to take picture:', error);
+      console.error('Failed to take picture or get description:', error);
     }
   }
 
   const closePhotoView = () => {
     setCapturedPhoto(null);
     setLastRecordingUri(null);
+    setImageDescription(null);
+    stopAudio(); // Stop the audio when closing the photo view
     AccessibilityInfo.announceForAccessibility("Returned to camera view.");
   }
 
@@ -162,6 +177,23 @@ export default function Index() {
     return (
       <View style={styles.container}>
         <Image source={{ uri: capturedPhoto }} style={styles.capturedPhoto} accessible={true} accessibilityLabel="Captured photo" />
+        {isGeneratingText && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <Text style={styles.loadingText}>Generating description...</Text>
+          </View>
+        )}
+        {imageDescription && (
+          <View style={styles.descriptionBox}>
+            <Text style={styles.descriptionText}>{imageDescription}</Text>
+            {isGeneratingAudio && (
+              <View style={styles.audioLoadingContainer}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.audioLoadingText}>Generating audio...</Text>
+              </View>
+            )}
+          </View>
+        )}
         <View style={styles.photoViewButtonContainer}>
           <TouchableOpacity 
             style={styles.largeButton} 
@@ -171,6 +203,15 @@ export default function Index() {
             accessibilityHint="Returns to camera view"
           >
             <Text style={styles.largeText}>Close</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.largeButton} 
+            onPress={replayAudio}
+            accessible={true}
+            accessibilityLabel="Replay audio description"
+            accessibilityHint="Plays the audio description of the photo again"
+          >
+            <Text style={styles.largeText}>Replay Audio</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.largeButton, recording ? styles.recordingButton : null]} 
@@ -190,7 +231,7 @@ export default function Index() {
               accessibilityLabel="Play recorded description"
               accessibilityHint="Plays back the recorded description of the photo"
             >
-              <Text style={styles.largeText}>Play Description</Text>
+              <Text style={styles.largeText}>Play Recording</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -306,5 +347,43 @@ const styles = StyleSheet.create({
   },
   recordingButton: {
     backgroundColor: 'rgba(255, 0, 0, 0.6)',
+  },
+  descriptionBox: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  descriptionText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: 'white',
+    fontSize: 18,
+    marginTop: 10,
+  },
+  audioLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  audioLoadingText: {
+    color: 'white',
+    fontSize: 14,
+    marginLeft: 10,
   },
 });
