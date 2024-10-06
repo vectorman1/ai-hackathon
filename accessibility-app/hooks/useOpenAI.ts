@@ -85,21 +85,10 @@ export const useOpenAI = () => {
           { type: "text", text: prompt },
         ]
       },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: question },
-          {
-            type: "image_url",
-            image_url: {
-              "url": `data:image/jpeg;base64,${imageB64}`,
-            },
-          },
-        ],
-      },
     ]
 
     if (texts.length > 0) {
+      console.log("texts so far", texts);
       let role: "assistant" | "user" = "assistant";
       texts.forEach(t => {
         baseMessages.push({
@@ -117,6 +106,19 @@ export const useOpenAI = () => {
         }
       });
     }
+
+    baseMessages.push({
+      role: "user",
+      content: [
+        { type: "text", text: question },
+        {
+          type: "image_url",
+          image_url: {
+            "url": `data:image/jpeg;base64,${imageB64}`,
+          },
+        },
+      ],
+    },)
 
     return baseMessages;
   }
@@ -142,8 +144,10 @@ export const useOpenAI = () => {
 
       const messages = buildMessages(imageB64, prompt, texts, question ?? 'Describe this image based on the given prompt.');
 
+      console.log("getting completion with messages", messages);
+
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: messages,
         max_tokens: 300
       });
@@ -151,6 +155,8 @@ export const useOpenAI = () => {
       if (response.choices && response.choices.length > 0 && response.choices[0].message) {
         const res = response.choices[0].message.content || 'No description available';
         setCompletions((prev) => ([...prev, res]))
+        console.log("got completion", res);
+
         return res;
       } else {
         throw new Error('Unexpected response structure from OpenAI API');

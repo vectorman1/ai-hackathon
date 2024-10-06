@@ -1,4 +1,4 @@
-import { LlamaContextType } from '@/hooks/useLLamaContext';
+import { LlamaContextType } from '@/hooks/useLlamaContext';
 import * as FileSystem from 'expo-file-system';
 import { initLlama, LlamaContext as LlamaContextRN } from 'llama.rn';
 import { createContext, useEffect, useState } from 'react';
@@ -44,7 +44,7 @@ export function LlamaProvider({ children }: { children: React.ReactNode }) {
                 model: modelPath,
                 use_mlock: true,
                 n_ctx: 2048,
-                n_gpu_layers: 1, // > 0: enable Metal on iOS
+                n_gpu_layers: 0, // > 0: enable Metal on iOS
                 // embedding: true, // use embedding
             })
 

@@ -1,6 +1,5 @@
 import 'expo-router/entry';
 
-import { LlamaProvider } from '@/components/LlamaProvider';
 import { WhisperProvider } from '@/components/WhisperProvider';
 import { useLlamaContext } from '@/hooks/useLlamaContext';
 import { useCameraPermissions } from 'expo-camera';
@@ -11,12 +10,9 @@ import { useWhisperContext } from '../hooks/useWhisperContext';
 
 const RootLayout = () => {
   return (
-    <LlamaProvider>
-      <LlamaInitializer />
-      <WhisperProvider>
-        <WhisperInitializer />
-      </WhisperProvider>
-    </LlamaProvider>
+    <WhisperProvider>
+      <WhisperInitializer />
+    </WhisperProvider>
   );
 };
 

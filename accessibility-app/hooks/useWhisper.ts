@@ -94,6 +94,8 @@ export const useWhisper = () => {
 
       const result = await promise;
 
+      console.log("got transcription result", result);
+
       if (!result || !result.result) {
         setError('Transcription returned no result');
       }

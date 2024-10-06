@@ -20,7 +20,7 @@ export default function Photo() {
     isLoadingAudio,
     completions
   } = useOpenAI();
-  const { transcribedTexts } = useWhisperContext();
+  const { transcribedTexts, setTranscribedTexts } = useWhisperContext();
   const { isRecording, handleRecordingAndTranscription, isLoading: isLoadingWhisper } = useWhisper();
   const [texts, setTexts] = useState<string[]>([]);
 
@@ -37,6 +37,10 @@ export default function Photo() {
 
     return unsubscribe;
   }, [navigation, stopAudio]);
+
+  useEffect(() => {
+    setTranscribedTexts([])
+  }, []);
 
   useEffect(() => {
     // make a new list interleaving both completions and transcribed texts, starting with a completion
@@ -86,6 +90,8 @@ export default function Photo() {
         encoding: FileSystem.EncodingType.Base64,
       });
       const response = await getImageDescription(base64, texts, latestTranscription);
+      console.log(response);
+
       await generateAndPlayAudio(response);
     }
   };
