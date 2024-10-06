@@ -1,4 +1,4 @@
-import { WhisperContext } from '@/components/WisperProvider';
+import { WhisperContext } from '@/components/WhisperProvider';
 import { useContext } from "react";
 import { WhisperContext as WhisperRNContext } from 'whisper.rn';
 

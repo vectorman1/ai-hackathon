@@ -10,7 +10,6 @@ export default function Index() {
     const [facing, setFacing] = useState<CameraType>(CameraType.back);
     const [cameraPermissions, requestCameraPermissions] = useCameraPermissions();
     const router = useRouter();
-    const [showDebug, setShowDebug] = useState(false);
 
     useEffect(() => {
         AccessibilityInfo.announceForAccessibility("Camera screen is ready. Tap the bottom of the screen for controls.");

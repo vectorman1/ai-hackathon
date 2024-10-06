@@ -9,26 +9,6 @@ import { useEffect, useState } from 'react';
 import { Vibration } from 'react-native';
 
 const API_KEY = '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'; // Replace with your actual API key
-const SYSTEM_PROMPT = "Here's a direct and concise system prompt for a visually impaired person helper LLM: \n" +
-  "You are an AI assistant designed to help visually impaired individuals understand their surroundings through image analysis. Your primary functions are: \n" +
-
-  "Analyze images captured by the user's device. \n" +
-  "Describe the surroundings clearly and concisely. \n" +
-  "Identify potential obstacles or hazards. \n" +
-  "Provide navigation assistance based on the visual information. \n" +
-
-  "When responding: \n" +
-
-  "Use only simple sentences without any formatting or system reading. \n" +
-  "Be clear, concise, and direct in your descriptions. \n" +
-  "Prioritize important information that affects safety and navigation. \n" +
-  "Use cardinal directions (north, south, east, west) and clock positions (e.g., 'at 2 o'clock') to indicate locations. \n" +
-  "Avoid ambiguous terms like 'over there' or 'to your left/right.' \n" +
-  "If asked, provide more detailed descriptions of specific objects or areas. \n" +
-  "Always be honest if you're unsure about any element in the image. \n" +
-
-  "Your goal is to empower the user by providing accurate, useful information about their environment, enhancing their independence and safety.";
-
 
 const openai = new OpenAI({ apiKey: API_KEY, baseURL: 'https://api.openai.com/v1' });
 
@@ -39,6 +19,8 @@ export const useOpenAI = () => {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [completions, setCompletions] = useState<string[]>([]);
+  const [imgClass, setImgClass] = useState<"object" | "scene">();
+
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -95,8 +77,8 @@ export const useOpenAI = () => {
     }
   }
 
-  const buildMessages = (imageB64: string, prompt: string, question: string): ChatCompletionMessageParam[] => {
-    return [
+  const buildMessages = (imageB64: string, prompt: string, texts: string[], question: string): ChatCompletionMessageParam[] => {
+    const baseMessages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content: [
@@ -116,18 +98,49 @@ export const useOpenAI = () => {
         ],
       },
     ]
+
+    if (texts.length > 0) {
+      let role: "assistant" | "user" = "assistant";
+      texts.forEach(t => {
+        baseMessages.push({
+          role: role,
+          content: [
+            {
+              type: "text", text: t
+            }
+          ]
+        });
+        if (role === "assistant") {
+          role = "user";
+        } else {
+          role = "assistant"
+        }
+      });
+    }
+
+    return baseMessages;
   }
 
-  const getImageDescription = async (imageB64: string, question?: string): Promise<string> => {
+  const getImageDescription = async (imageB64: string, texts: string[], question?: string): Promise<string> => {
     setIsLoadingText(true);
     setError(null);
 
     try {
-      const imgClass = await classifyImage(imageB64);
+      let tempImgClass;
+      if (!imgClass) {
+        console.log("classifying image");
+        const newImgClass = await classifyImage(imageB64);
+        console.log(`classified image as ${newImgClass}`)
+        setImgClass(newImgClass)
+        tempImgClass = newImgClass;
+      } else {
+        console.log(`using previous classification of ${imgClass}`);
+        tempImgClass = imgClass;
+      }
 
-      const prompt = await (imgClass === 'object' ? OBJECT_PROMPT : SCENE_PROMPT);
+      const prompt = tempImgClass === 'object' ? OBJECT_PROMPT : SCENE_PROMPT;
 
-      const messages = buildMessages(imageB64, prompt, question ?? 'Describe this image based on the given prompt.');
+      const messages = buildMessages(imageB64, prompt, texts, question ?? 'Describe this image based on the given prompt.');
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -254,8 +267,12 @@ export const useOpenAI = () => {
 
   const stopAudio = async () => {
     if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
+      try {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+      } catch (e) {
+        console.log(e);
+      }
       setSound(null);
     }
   };

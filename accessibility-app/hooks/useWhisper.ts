@@ -63,7 +63,7 @@ export const useWhisper = () => {
       if (uri) {
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (fileInfo.exists && fileInfo.size > 0) {
-          await transcribeAudio(uri);
+          return await transcribeAudio(uri);
         } else {
           setError('Recording file is empty or does not exist');
         }
@@ -76,10 +76,10 @@ export const useWhisper = () => {
     }
   };
 
-  const transcribeAudio = async (audioUri: string) => {
+  const transcribeAudio = async (audioUri: string): Promise<string> => {
     if (!whisperContext) {
       setError('Whisper context is not available');
-      return;
+      return "";
     }
 
     setIsLoading(true);
@@ -99,9 +99,11 @@ export const useWhisper = () => {
       }
 
       setTranscribedTexts([...transcribedTexts, result.result]);
+      return result.result;
     } catch (err) {
       setError('Failed to transcribe audio');
       console.error('Error transcribing audio:', err);
+      return ""
     } finally {
       setIsLoading(false);
     }
@@ -109,9 +111,9 @@ export const useWhisper = () => {
 
   const handleRecordingAndTranscription = async () => {
     if (isRecording) {
-      await stopRecording();
+      return await stopRecording();
     } else {
-      await startRecording();
+      return await startRecording();
     }
   };
 
@@ -120,6 +122,5 @@ export const useWhisper = () => {
     isRecording,
     error,
     handleRecordingAndTranscription,
-
   };
 };
